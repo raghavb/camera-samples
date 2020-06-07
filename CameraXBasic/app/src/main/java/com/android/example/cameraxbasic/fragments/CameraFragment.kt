@@ -251,7 +251,7 @@ class CameraFragment : Fragment() {
 
             // Select lensFacing depending on the available cameras
             lensFacing = when {
-                hasBackCamera() -> CameraSelector.LENS_FACING_BACK
+//                hasBackCamera() -> CameraSelector.LENS_FACING_BACK
                 hasFrontCamera() -> CameraSelector.LENS_FACING_FRONT
                 else -> throw IllegalStateException("Back and front camera are unavailable")
             }
@@ -477,6 +477,10 @@ class CameraFragment : Fragment() {
                         .actionCameraToGallery(outputDirectory.absolutePath))
             }
         }
+
+//        controls.findViewById<ImageButton>(R.id.camera_capture_button).visibility = View.INVISIBLE
+        controls.findViewById<ImageButton>(R.id.camera_switch_button).visibility = View.INVISIBLE
+//        controls.findViewById<ImageButton>(R.id.photo_view_button).visibility = View.INVISIBLE
     }
 
     /** Enabled or disabled a button to switch cameras depending on the available cameras */
