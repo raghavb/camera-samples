@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.android.example.cameraxbasic
+package com.android.samaritan.thermo
 
 import android.Manifest
 import android.content.Context

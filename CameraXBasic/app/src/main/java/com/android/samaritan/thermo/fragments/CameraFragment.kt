@@ -14,29 +14,32 @@
  * limitations under the License.
  */
 
-package com.android.example.cameraxbasic.fragments
+package com.android.samaritan.thermo.fragments
 
 import android.annotation.SuppressLint
+import android.app.PendingIntent.getActivity
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.res.Configuration
 import android.graphics.Color
+import android.graphics.PointF
 import android.graphics.drawable.ColorDrawable
 import android.hardware.display.DisplayManager
 import android.media.MediaScannerConnection
 import android.net.Uri
-import android.os.Build
-import android.os.Bundle
+import android.os.*
 import android.util.DisplayMetrics
 import android.util.Log
+import android.util.Size
 import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.MimeTypeMap
 import android.widget.ImageButton
+import android.widget.Toast
 import androidx.camera.core.AspectRatio
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraInfoUnavailableException
@@ -57,15 +60,27 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.navigation.Navigation
-import com.android.example.cameraxbasic.KEY_EVENT_ACTION
-import com.android.example.cameraxbasic.KEY_EVENT_EXTRA
-import com.android.example.cameraxbasic.MainActivity
-import com.android.example.cameraxbasic.R
-import com.android.example.cameraxbasic.utils.ANIMATION_FAST_MILLIS
-import com.android.example.cameraxbasic.utils.ANIMATION_SLOW_MILLIS
-import com.android.example.cameraxbasic.utils.simulateClick
+import com.android.samaritan.thermo.KEY_EVENT_ACTION
+import com.android.samaritan.thermo.KEY_EVENT_EXTRA
+import com.android.samaritan.thermo.MainActivity
+import com.android.samaritan.thermo.R
+import com.android.samaritan.thermo.utils.ANIMATION_FAST_MILLIS
+import com.android.samaritan.thermo.utils.ANIMATION_SLOW_MILLIS
+import com.android.samaritan.thermo.utils.simulateClick
 import com.bumptech.glide.Glide
 import com.bumptech.glide.request.RequestOptions
+import com.google.android.gms.tasks.OnFailureListener
+import com.google.android.gms.tasks.OnSuccessListener
+import com.google.firebase.ktx.Firebase
+import com.google.firebase.ml.vision.FirebaseVision
+import com.google.firebase.ml.vision.common.FirebaseVisionImage
+import com.google.firebase.ml.vision.common.FirebaseVisionImageMetadata
+import com.google.firebase.ml.vision.face.FirebaseVisionFace
+import com.google.firebase.ml.vision.face.FirebaseVisionFaceContour
+import com.google.firebase.ml.vision.face.FirebaseVisionFaceDetector
+import com.google.firebase.ml.vision.face.FirebaseVisionFaceDetectorOptions
+import com.google.firebase.storage.StorageReference
+import com.google.firebase.storage.ktx.storage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.io.File
@@ -75,13 +90,14 @@ import java.util.ArrayDeque
 import java.util.Locale
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.collections.ArrayList
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 
 /** Helper type alias used for analysis use case callbacks */
-typealias LumaListener = (luma: Double) -> Unit
+typealias LumaListener = (luma: String) -> Unit
 
 /**
  * Main fragment for this app. Implements all camera operations including:
@@ -103,6 +119,8 @@ class CameraFragment : Fragment() {
     private var imageAnalyzer: ImageAnalysis? = null
     private var camera: Camera? = null
     private var cameraProvider: ProcessCameraProvider? = null
+    val storage = Firebase.storage
+    var storageRef = storage.reference
 
     private val displayManager by lazy {
         requireContext().getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
@@ -197,6 +215,7 @@ class CameraFragment : Fragment() {
         viewFinder = container.findViewById(R.id.view_finder)
 
         // Initialize our background executor
+//        cameraExecutor = Executors.newFixedThreadPool(4)
         cameraExecutor = Executors.newSingleThreadExecutor()
 
         broadcastManager = LocalBroadcastManager.getInstance(view.context)
@@ -304,21 +323,21 @@ class CameraFragment : Fragment() {
                 .setTargetRotation(rotation)
                 .build()
 
+
         // ImageAnalysis
         imageAnalyzer = ImageAnalysis.Builder()
                 // We request aspect ratio but no resolution
-                .setTargetAspectRatio(screenAspectRatio)
+                .setTargetResolution(Size(480, 640))
+                .setImageQueueDepth(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 // Set initial target rotation, we will have to call this again if rotation changes
                 // during the lifecycle of this use case
                 .setTargetRotation(rotation)
                 .build()
                 // The analyzer can then be assigned to the instance
                 .also {
-                    it.setAnalyzer(cameraExecutor, LuminosityAnalyzer { luma ->
-                        // Values returned from our analyzer are passed to the attached listener
-                        // We log image analysis results here - you should do something useful
-                        // instead!
-                        Log.d(TAG, "Average luminosity: $luma")
+                    it.setAnalyzer(cameraExecutor, FaceAnalyzer{toast ->
+                        Toast.makeText(requireActivity(), toast, Toast.LENGTH_LONG).show()
+                        Log.d(TAG, "Average luminosity: $toast")
                     })
                 }
 
@@ -409,6 +428,8 @@ class CameraFragment : Fragment() {
                         val savedUri = output.savedUri ?: Uri.fromFile(photoFile)
                         Log.d(TAG, "Photo capture succeeded: $savedUri")
 
+                        uploadToFirebase(savedUri.toFile())
+
                         // We can only change the foreground Drawable using API level 23+ API
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                             // Update the gallery thumbnail with latest picture taken
@@ -484,6 +505,39 @@ class CameraFragment : Fragment() {
 //        controls.findViewById<ImageButton>(R.id.camera_capture_button).visibility = View.INVISIBLE
         controls.findViewById<ImageButton>(R.id.camera_switch_button).visibility = View.INVISIBLE
 //        controls.findViewById<ImageButton>(R.id.photo_view_button).visibility = View.INVISIBLE
+    }
+
+    private fun uploadToFirebase(file: File) {
+        // [START upload_get_download_url]
+        val fileUri = Uri.fromFile(file)
+        val ref = storageRef.child("images/mountains.jpg")
+        var uploadTask = ref.putFile(fileUri)
+
+        val urlTask = uploadTask.continueWithTask { task ->
+            if (!task.isSuccessful) {
+                task.exception?.let {
+                    throw it
+                }
+            }
+            ref.downloadUrl
+        }.addOnCompleteListener { task ->
+            if (task.isSuccessful) {
+                val downloadUri = task.result
+                // TODO: Delete image locally
+                if (file.exists()) {
+                    if (file.delete()) {
+                        System.out.println("file Deleted :")
+                    } else {
+                        System.out.println("file not Deleted :")
+                    }
+                }
+
+            } else {
+                // Handle failures
+                // ...
+            }
+        }
+        // [END upload_get_download_url]
     }
 
     /** Enabled or disabled a button to switch cameras depending on the available cameras */
@@ -587,7 +641,7 @@ class CameraFragment : Fragment() {
             val luma = pixels.average()
 
             // Call all listeners with new value
-            listeners.forEach { it(luma) }
+//            listeners.forEach { it(luma) }
 
             image.close()
         }
@@ -605,5 +659,87 @@ class CameraFragment : Fragment() {
         private fun createFile(baseFolder: File, format: String, extension: String) =
                 File(baseFolder, SimpleDateFormat(format, Locale.US)
                         .format(System.currentTimeMillis()) + extension)
+    }
+
+
+    private class FaceAnalyzer(listener: LumaListener? = null): ImageAnalysis.Analyzer {
+
+        private var isAnalyzing = AtomicBoolean(false)
+        private val listeners = ArrayList<LumaListener>().apply { listener?.let { add(it) } }
+        private var hasFace = false
+//        var pointsListListener: ((List<PointF>) -> Unit)? = null
+//        var analysisSizeListener: ((Size) -> Unit)? = null
+        private var currentTime = System.currentTimeMillis()
+        private var timestampLast = 0L
+
+
+        private val faceDetector: FirebaseVisionFaceDetector by lazy {
+            val options = FirebaseVisionFaceDetectorOptions.Builder()
+                    .build()
+
+            FirebaseVision.getInstance().getVisionFaceDetector(options)
+        }
+
+        private val successListener = OnSuccessListener<List<FirebaseVisionFace>> { faces ->
+
+            val points = mutableListOf<PointF>()
+            Log.d("FaceAnalyzer", "Faces: " + faces.size)
+            if (faces.size > 0 && !hasFace) {
+                listeners.forEach { it("Face") }
+                hasFace = true
+            }
+
+            if (faces.size == 0 && hasFace) {
+                listeners.forEach { it("No Face") }
+//                Toast.makeText(MainActivity(), "Face gone", Toast.LENGTH_LONG).show()
+                hasFace = false
+            }
+//            for (face in faces) {
+//                val contours = face.getContour(FirebaseVisionFaceContour.ALL_POINTS)
+//                points += contours.points.map { PointF(it.x, it.y) }
+//            }
+
+//            pointsListListener?.invoke(points)
+        }
+        private val failureListener = OnFailureListener { e ->
+            Log.e("FaceAnalyzer", "Face analysis failure.", e)
+        }
+
+        @SuppressLint("UnsafeExperimentalUsageError")
+        override fun analyze(image: ImageProxy) {
+            // Keep track of frames analyzed
+            val cameraImage = image?.image ?: return
+            val rotationDegrees = image.imageInfo.rotationDegrees
+            currentTime = System.currentTimeMillis()
+//            Log.d("timestampLast", (currentTime - timestampLast).toString())
+            if (currentTime - timestampLast < 330) {
+//                Log.d("timestampLast", timestampLast.toString())
+                image.close()
+                return
+            }
+//            Log.d("timestampLast", "$currentTime $timestampLast")
+            timestampLast = currentTime
+
+
+
+//            analysisSizeListener?.invoke(Size(image.width, image.height))
+
+            val firebaseVisionImage = FirebaseVisionImage.fromMediaImage(cameraImage, getRotationConstant(rotationDegrees))
+
+            val result = faceDetector.detectInImage(firebaseVisionImage)
+                    .addOnSuccessListener(successListener)
+                    .addOnFailureListener(failureListener)
+
+            image.close()
+        }
+
+        private fun getRotationConstant(rotationDegrees: Int): Int {
+            return when (rotationDegrees) {
+                90 -> FirebaseVisionImageMetadata.ROTATION_90
+                180 -> FirebaseVisionImageMetadata.ROTATION_180
+                270 -> FirebaseVisionImageMetadata.ROTATION_270
+                else -> FirebaseVisionImageMetadata.ROTATION_0
+            }
+        }
     }
 }

@@ -10,11 +10,16 @@
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * See the License for the specific langu
+ * TODO:
+ *  Connect Mercury
+ *  Auth
+ *  Upload image
+ *  Upload Data
+ *  Delete local image
  */
 
-package com.android.example.cameraxbasic
+package com.android.samaritan.thermo
 
 import android.content.Context
 import android.os.Bundle
@@ -24,7 +29,7 @@ import java.io.File
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import android.content.Intent
 import android.widget.FrameLayout
-import com.android.example.cameraxbasic.utils.FLAGS_FULLSCREEN
+import com.android.samaritan.thermo.utils.FLAGS_FULLSCREEN
 
 const val KEY_EVENT_ACTION = "key_event_action"
 const val KEY_EVENT_EXTRA = "key_event_extra"

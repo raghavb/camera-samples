@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.android.example.cameraxbasic.fragments
+package com.android.samaritan.thermo.fragments
 
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -31,14 +31,14 @@ import android.webkit.MimeTypeMap
 import android.widget.ImageButton
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.FileProvider
-import com.android.example.cameraxbasic.BuildConfig
-import com.android.example.cameraxbasic.utils.padWithDisplayCutout
+import com.android.samaritan.thermo.BuildConfig
+import com.android.samaritan.thermo.utils.padWithDisplayCutout
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.FragmentStatePagerAdapter
 import androidx.navigation.Navigation
 import androidx.navigation.fragment.navArgs
-import com.android.example.cameraxbasic.utils.showImmersive
-import com.android.example.cameraxbasic.R
+import com.android.samaritan.thermo.utils.showImmersive
+import com.android.samaritan.thermo.R
 import java.util.Locale
 
 val EXTENSION_WHITELIST = arrayOf("JPG")
