@@ -119,6 +119,8 @@ class CameraFragment : Fragment() {
                 KeyEvent.KEYCODE_VOLUME_DOWN -> {
                     val shutter = container
                             .findViewById<ImageButton>(R.id.camera_capture_button)
+
+                    // This is the function to call when to capture photo
                     shutter.simulateClick()
                 }
             }
@@ -478,6 +480,7 @@ class CameraFragment : Fragment() {
             }
         }
 
+        // TODO: Remove all the buttons
 //        controls.findViewById<ImageButton>(R.id.camera_capture_button).visibility = View.INVISIBLE
         controls.findViewById<ImageButton>(R.id.camera_switch_button).visibility = View.INVISIBLE
 //        controls.findViewById<ImageButton>(R.id.photo_view_button).visibility = View.INVISIBLE
